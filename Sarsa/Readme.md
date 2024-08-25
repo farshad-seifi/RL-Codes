@@ -1,0 +1,2 @@
+In the windy gridworld,in special state winds power can move the agent to different locations. Using a Sarsa methods, optimum strategy has been found in this priblem. As shown in the following plot, it is clear that during time, the agent has learned and made better decisions because number of finished episode has grown rapidly.
+![Sarsa](https://github.com/user-attachments/assets/1aeb1d68-54c3-4e4c-92f0-89a2d3b3abde)
