@@ -1,0 +1,2 @@
+Sarsa is a sample-based algorithm to solve the Bellman equation for actionvalues but Q-learning uses optimality Bellman equation for action values. The optimality equation enables Q-learning to learn q* directly instead of switching between policy evaluation and policy improvement. Therefore, Q-learning can learn faster after some steps compared to Sarsa method and it has been shown in the following plot.
+![Sarsa vs Q-Learning](https://github.com/user-attachments/assets/9a67f0f9-d4ed-4146-b278-3ac9e53fc185)
