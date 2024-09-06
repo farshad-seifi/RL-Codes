@@ -1,0 +1,2 @@
+In this plot you can compare the performance of DynaQ algorithm vs. Q-Learning. As DynaQ uses a planning state and using a model tries to update Q-values, it can find the optimum path in th thev Maze more quickly. Based on the plot, it is clear that DynaQ learns the best path after 4 episode while for Q-Learning it takes more than 20 episodes to converge to the optimum path.
+![Maze](https://github.com/user-attachments/assets/15c9f52f-d402-4b1b-af53-3bded7e04f91)
