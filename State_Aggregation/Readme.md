@@ -1,0 +1,3 @@
+State Aggregation with Monte Carlo as a simple way of value function estimation has been used in this project. In this RL code, a random walk with 1000 states which returns +1 in the state of 1000 and -1 in the state 0 has been used as the example. As it is clear in the following plot, state aggregation can estimate the value function with an acceptable accuracy. Moreover, the estimation for states near to 500 state (the starting point) is more accurate because such states selects more and have more weight in MSE function leading to less error for them. 
+
+![State_Aggregation](https://github.com/user-attachments/assets/920683f6-5e29-461e-aba0-d1d434efac4b)
