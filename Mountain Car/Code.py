@@ -6,106 +6,129 @@ import pandas as pd
 
 # Initialize environment
 env = gym.make("MountainCar-v0")
-epsilon = 1.0  # Start with high exploration
-epsilon_decay = 0.99  # Decay rate for epsilon
-min_epsilon = 0.1  # Minimum exploration rate
+epsilon = 0.2  # Start with high exploration
 gamma = 0.99  # Discount factor
-alpha = 0.01  # Learning rate
 
 # Tile coding parameters
-tile_number = 9
-tile_size = 8
+tile_number = 8
+tile_size = 10
+
+alpha = 0.1 / tile_number # Learning rate
+
+Model = 'Expected_Sarsa'
 
 class TileCoder:
     def __init__(self, tile_number, tile_size):
-        self.tile_number = tile_number
         self.tile_size = tile_size
+        self.tile_number = tile_number
 
-    def get_features(self, state, variables):
-        # Normalize state
-        state_scaled = (state - variables.low) / (variables.high - variables.low)
+    def GetFeatures(self, state, variables):
         tiles = []
-        for i in range(self.tile_number):
-            offset = i / self.tile_number
-            state_with_offset = (state_scaled + offset) % 1
-            tile_index = (state_with_offset * self.tile_size).astype(int)
-            tiles.append(tile_index[0] * self.tile_size + tile_index[1] + i * self.tile_size * self.tile_size)
+        for i in range(0, self.tile_number):
+            offset_coefficient = i/(self.tile_number * 4)
+            first_range = (variables.high[0] - variables.low[0])
+            second_range = (variables.high[1] - variables.low[1])
+            first_offset_value = first_range * offset_coefficient
+            second_offset_value = second_range * offset_coefficient
+            scale_first = (state[0] - (variables.low[0] + i * first_offset_value)) / first_range
+            scale_second = (state[1] - (variables.low[1] + i * second_offset_value)) / second_range
+
+            first_index = int(scale_first * self.tile_size)
+            second_index = int(scale_second * self.tile_size)
+
+            mid_index = first_index * self.tile_size + second_index
+
+            final_index = mid_index + i * self.tile_size * self.tile_size
+
+            tiles.append(final_index)
+
         return tiles
 
 
 tile_coder = TileCoder(tile_number, tile_size)
 
 # Initialize weights
-weights = np.zeros((tile_size * tile_size * 3 * tile_number,))  # 3 actions, tiles per feature
 
 # Training episodes
 n_episodes = 200
-steps_per_episode = []
+replications = 10
+steps_per_episode = pd.DataFrame(np.zeros((n_episodes, replications)))
 
-for episode in range(n_episodes):
-    state, _ = env.reset()
-    done = False
-    total_steps = 0
+for j in range(0, replications):
+    w = np.zeros((tile_size * tile_size * 3 * tile_number,))  # 3 actions, tiles per feature
 
-    while not done:
-        # Get tile features
-        tiles = tile_coder.get_features(state, env.observation_space)
+    for i in range(0, n_episodes):
+        state, _ = env.reset()
+        done = False
+        total_step = 0
 
-        # Choose action (epsilon-greedy)
-        if random.random() < epsilon:
-            action = env.action_space.sample()  # Random action
-        else:
-            q_values = []
-            for a in range(3):
-                q_value = sum(
-                    weights[int(tile) + a * tile_size * tile_size * tile_number] for tile in tiles
-                )
-                q_values.append(q_value)
-            action = np.argmax(q_values)
+        while (not done):
+            tiles = tile_coder.GetFeatures(state, env.observation_space)
 
-        # Take action
-        new_state, reward, done, _, _ = env.step(action)
+            rand = random.random()
+            if rand <= epsilon:
+                action = random.choice([0, 1, 2])
+            else:
+                q_values = []
+                zero_count = 0
+                for a in range(3):
+                    q_value = w[np.array(tiles) + a * tile_size * tile_size * tile_number].sum()
+                    q_values.append(q_value)
+                    if q_value == 0:
+                        zero_count += 1
 
-        # Get next tile features
-        new_tiles = tile_coder.get_features(new_state, env.observation_space)
+                if zero_count <= 1:
+                    action = np.argmax(q_values)
+                else:
+                    max_indices = np.argwhere(q_values == np.max(q_values)).flatten()
 
-        # Compute target and update weights
-        if done:
-            target = reward  # No future reward if episode ends
-        else:
-            next_q_values = []
-            for a in range(3):
-                q_value = sum(weights[int(tile) + a * tile_size * tile_size * tile_number] for tile in new_tiles)
-                next_q_values.append(q_value)
-            target = reward + gamma * max(next_q_values)
+                    # Select one index randomly
+                    action = np.random.choice(max_indices)
 
-        current_q = sum(weights[int(tile) + action * tile_size * tile_size * tile_number] for tile in tiles)
-        td_error = target - current_q
+            # Take action
+            new_state, reward, done, _, _ = env.step(action)
+            if done:
+                q_value = w[np.array(tiles) + action * tile_size * tile_size * tile_number].sum()
+                w[np.array(tiles) + action * tile_size * tile_size * tile_number] += alpha * (reward - q_value)
+                steps_per_episode[j].iloc[i] = total_step
+            else:
+                q_values_new = []
+                new_tiles = tile_coder.GetFeatures(new_state, env.observation_space)
+                for a in range(3):
+                    q_value = w[np.array(new_tiles) + a * tile_size * tile_size * tile_number].sum()
+                    q_values_new.append(q_value)
+                if Model == 'Q_Learning':
+                    q_hat_value = np.max(q_values_new)
+                elif Model == 'Expected_Sarsa':
+                    def softmax(x):
+                        exp_x = np.exp(x - np.max(x))  # Subtract max for numerical stability
+                        return exp_x / exp_x.sum()
 
-        for tile in tiles:
-            weights[int(tile) + action * tile_size * tile_size * tile_number] += alpha * td_error
+                    probabilities = softmax(np.array(q_values_new))
+                    q_hat_value = (probabilities * np.array(q_values_new)).sum()
 
-        # Update state
-        state = new_state
-        total_steps += 1
+                q_value = w[np.array(tiles) + action * tile_size * tile_size * tile_number].sum()
+                w[np.array(tiles) + action * tile_size * tile_size * tile_number] += alpha * (
+                            reward + gamma * q_hat_value - q_value)
 
-    # Decay epsilon
-    epsilon = max(min_epsilon, epsilon * epsilon_decay)
+            state = new_state
+            total_step += 1
 
-    # Track steps for analysis
-    steps_per_episode.append(total_steps)
+            if (total_step + 1) % 100 == 0:
+                print(f"Episode {total_step + 1}: Steps = {total_step}")
 
-    # Logging
-    if (episode + 1) % 10 == 0:
-        print(f"Episode {episode + 1}: Steps = {total_steps}")
 
-# Plot results
-plt.rcParams['font.family'] = 'Times New Roman'
-
-plt.plot(np.log(steps_per_episode))
-plt.title("Steps per Episode")
-plt.xlabel("Episode")
-plt.ylabel("Steps (Log Scale)")
-plt.savefig('Mountain Car.png', dpi= 1200)
-
-plt.show()
+# plt.rcParams['font.family'] = 'Times New Roman'
+#
+# steps_per_episode_mean = steps_per_episode.mean(axis=1)
+# # steps_per_episode_mean_Qlearning = steps_per_episode_mean.copy()
+# plt.plot((steps_per_episode_mean), label = 'Expected_Sarsa')
+# plt.plot((steps_per_episode_mean_Qlearning), label ='Q-Learning')
+#
+# plt.title("Steps per Episode")
+# plt.xlabel("Episode")
+# plt.ylabel("Steps (Averaged on Ten Runs)")
+# plt.legend()
+# plt.savefig('Mountain Car.png', dpi= 1200)
+#
+# plt.show()
